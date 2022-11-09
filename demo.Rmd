@@ -1,0 +1,164 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Load Libraries and Data
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(palmerpenguins)
+```
+
+```{r}
+penguins_df <- penguins %>% drop_na()
+penguins_df
+```
+
+# Plot Bar Plot of Body Mass
+
+```{r}
+# group_by species and summarize mean_body_mass
+penguins_df %>%
+  group_by(species) %>%
+  summarize(mean_body_mass = mean(body_mass_g)) %>%
+  ggplot() +
+    geom_bar(mapping = aes(y = species, x = mean_body_mass), stat = "identity")
+
+```
+Are Chinstrap Penguins bigger than Adelie Penguins?
+
+# Calculate Confidence Interval
+
+The lazy interpretation: We are 95 percent confident that the 95 percent confidence interval contains the true population mean.
+[Statistical Inference via Data Science: A ModernDive into R and the Tidyverse! ](https://moderndive.com/8-confidence-intervals.html#shorthand), Chester Ismay and Albert Y. Kim 
+
+A more precise interpretation:
+"If multiple samples were drawn from the same population and a 95% CI calculated for each sample, we would expect the population mean to be found within 95% of these CIs." 
+[How do I interpret a confidence interval?](https://pubmed.ncbi.nlm.nih.gov/27184382/), Sheila F O'Brien and Qi Long Yi
+
+## "Theoretical Way"
+[equation](https://www.google.com/search?client=safari&rls=en&q=confidence+interval+equation&ie=UTF-8&oe=UTF-8)
+```{r}
+# group_by species
+# summarize mean, std, and n
+# mutate se, lower nd upper ci
+# se_body_mass = std_body_mass / sqrt(n)
+# lower_ci = mean_body_mass + qt(0.025, n - 1) * se_body_mass
+# upper_ci = mean_body_mass + qt(0.975, n - 1) * se_body_mass
+
+penguins_ci <- penguins_df %>%
+  group_by(species) %>%
+  summarize(
+    mean_body_mass = mean(body_mass_g),
+    std_body_mass = sd(body_mass_g),
+    n_penguins = n()
+  ) %>%
+  mutate(
+    se_body_mass = std_body_mass / sqrt(n_penguins),
+    lower_ci = mean_body_mass - qt(0.975, n_penguins - 1) * se_body_mass,
+    upper_ci = mean_body_mass + qt(0.975, n_penguins - 1) * se_body_mass
+  )
+
+penguins_ci
+```
+## Simulation Way (Bootstrapping)
+Bootstrapping
+- Assume sample is representative of population
+- Resample with replacement from sample (Sample pulling itself up by the bootstraps!)
+
+```{r}
+# Use filter to get a specific penguin
+# Use specify to focus on body_mass_g
+# Use generate to generate 100 reps (bootstrap)
+# Use calculate to calculate the "mean"
+# use get_confidence_interval(level = 0.95, type = "se", point_estimate = 3706.164)
+penguins_df %>%
+  filter(species == "Adelie") %>%
+  specify(response = body_mass_g) %>%
+  generate(reps = 300, method = "bootstrap") %>%
+  calculate(stat = "mean") %>%
+  get_confidence_interval(level = 0.95, type = "se", point_estimate = 3706.164)
+
+```
+
+```{r}
+penguins_df %>%
+  filter(species == "Chinstrap") %>%
+  specify(response = body_mass_g) %>%
+  generate(reps = 300, method = "bootstrap") %>%
+  calculate(stat = "mean") %>%
+  get_confidence_interval(level = 0.95, type = "se", point_estimate = 3733.088)
+```
+
+```{r}
+penguins_df %>%
+  filter(species == "Gentoo") %>%
+  specify(response = body_mass_g) %>%
+  generate(reps = 300, method = "bootstrap") %>%
+  calculate(stat = "mean") %>%
+  get_confidence_interval(level = 0.95, type = "se", point_estimate = 5092.437)
+```
+
+
+```{r}
+penguins_df %>%
+  filter(species == "Adelie") %>%
+  specify(response = body_mass_g) %>%
+  generate(reps = 2000, method = "bootstrap") %>%
+  calculate(stat = "mean") %>%
+  ggplot() +
+    geom_histogram(aes(x = stat))
+```
+```
+
+
+# Add Confidence Interval to Bar Plot
+```{r}
+penguins_df %>%
+  group_by(species) %>%
+  summarize(mean_body_mass = mean(body_mass_g)) %>%
+  ggplot() +
+    geom_bar(mapping = aes(y = species, x = mean_body_mass), stat = "identity") +
+    geom_errorbar(data=penguins_ci, mapping = aes(y = species, xmin = lower_ci, xmax = upper_ci))
+```
+
+
+
+# Plot Confidence Intervals on Jitter
+
+## Plot Jitter
+```{r}
+penguins_df %>%
+  ggplot() +
+    geom_jitter(aes(y = species, x = body_mass_g, color = species)) + 
+    geom_errorbar(data=penguins_ci, mapping = aes(y = species, xmin = lower_ci, xmax = upper_ci)) +
+    geom_point(data=penguins_ci, mapping = aes(y = species, x = mean_body_mass))
+```
+
+
+## Add Confidence Interval to Jitter Plot
+
+```{r}
+# user geom_errorbar and geom_point (for mean)
+body_mass_jitter + 
+  geom_errorbar(data = body_mass_ci, aes(y = species, xmin = lower_ci, xmax = upper_ci)) + 
+  geom_point(data = body_mass_se, aes(y = species, x = mean_body_mass))
+```
+
+
+# Plot Confidence Interval on Violin Plot
+```{r}
+
+penguins_violin <- penguins_df %>%
+  ggplot() +
+    geom_violin(aes(y = species, x = body_mass_g))
+    
+penguins_violin
+```
+
+```{r}
+penguins_violin +
+  geom_errorbar(data = body_mass_ci, aes(y = species, xmin = lower_ci, xmax = upper_ci)) + 
+  geom_point(data = body_mass_se, aes(y = species, x = mean_body_mass))
+```
